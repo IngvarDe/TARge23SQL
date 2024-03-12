@@ -316,3 +316,128 @@ insert into Test1 values('X')
 select * from Test1
 
 --rida 303
+alter table Employees
+drop column City
+
+-- inner join
+-- kuvab neid, kellel on DepartmentName all olemas v‰‰rtus
+select Name, Gender, Salary, Department.DepartmentName
+from Employees
+inner join Department
+on Employees.DepartmentId = Department.Id
+
+select * from Employees
+select * from Department
+
+--left join
+-- kuidas saada k]ik andmed Employeest k'tte
+select Name, Gender, Salary, DepartmentName
+from Employees
+left join Department -- v]i kasutada ka LEFT OUTER JOIN-i
+on Employees.DepartmentId = Department.Id
+
+--- right join
+--- kuidas saada DepartmentName alla uus nimetus 
+select Name, Gender, Salary, DepartmentName
+from Employees
+right join Department -- v]i kasutada ka RIGHT OUTER JOIN-i
+on Employees.DepartmentId = Department.Id
+
+select * from Department
+
+-- kuidas saada k]ikide tabelite v''rtused [hte p'ringusse
+select Name, Gender, Salary, DepartmentName
+from Employees
+full outer join Department
+on Employees.DepartmentId = Department.Id
+
+--cross join vıtab kaks allpool olevat tabelit kokku
+-- ja korrutab need omavahel l‰bi
+select Name, Gender, Salary, DepartmentName
+from Employees
+cross join Department
+
+-- p‰ringu sisu
+select ColumnList
+from LeftTable
+joinType RightTable
+on JoinCondition
+
+-- kuidas kuvada ainult need isikud, kellel on DepartmentName NULL
+select Name, Gender, Salary, DepartmentName
+from Employees
+left join Department
+on Employees.DepartmentId = Department.Id
+where Employees.DepartmentId is null
+
+-- teine variant
+select Name, Gender, Salary, DepartmentName
+from Employees
+left join Department
+on Employees.DepartmentId = Department.Id
+where Department.Id is null
+
+-- full join
+-- m]lema tabeli mitte-kattuvate v''rtustega read kuvab v'lja
+select Name, Gender, Salary, DepartmentName
+from Employees
+full join Department
+on Employees.DepartmentId = Department.Id
+where Employees.DepartmentId is null
+or Department.Id is null
+
+-- kuidas saame Department tabelis oleva rea, kus on NULL
+select Name, Gender, Salary, DepartmentName
+from Employees
+right join Department
+on Employees.DepartmentId = Department.Id
+where Employees.DepartmentId is null
+
+-- kuidas muuta tabeli nime, 
+-- alguses vana tabeli nimi ja siis uue nimi
+sp_rename 'Department1', 'Department'
+
+-- kasutame Employees tabeli asemel l[hendit E ja 
+-- Departmenti puhul D
+select E.Name as EmpName, D.DepartmentName as DeptName
+from Employees E
+left join Department D
+on E.DepartmentId = D.Id
+
+--inner join
+-- kuvab ainult isikuid, 
+-- kellel on DepartmentId veerus v''rtus 
+select E.Name as EmpName, D.DepartmentName as DeptName
+from Employees E
+inner join Department D
+on E.DepartmentId = D.Id
+
+-- cross join
+select E.Name as EmpName, D.DepartmentName as DeptName
+from Employees E
+cross join Department D
+
+--
+select isnull('Ingvar', 'No Manager') as Manager
+
+-- NULL asemel kuvab No Manager
+select coalesce(NULL, 'No Manager') as Manager
+
+--kui Expression on ]ige, siis paneb v''rtuse, 
+-- mida soovid v]i m]ne teise v''rtuse 
+case when Expression Then '' else '' end
+
+---
+alter table Employees
+add ManagerId int
+
+--neil, kellel ei ole [lemust, siis panb neile No manager teksti
+select E.Name as Employee, isnull(M.Name, 'No Manager') as Manager
+from Employees E
+left join Employees M
+on E.ManagerId = M.Id
+
+-- teeme p'ringu, kus kasutame case-i
+
+
+
