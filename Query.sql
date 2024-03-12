@@ -438,6 +438,170 @@ left join Employees M
 on E.ManagerId = M.Id
 
 -- teeme p'ringu, kus kasutame case-i
+select E.Name as Employee, case when M.Name is null then 'No Manager'
+else M.Name end as Manager
+from Employees E
+left join Employees M
+on E.ManagerId = M.Id
+
+-- lisame tabelisse uued veerud
+alter table Employees
+add MiddleName nvarchar(30),
+LastName nvarchar(30)
+
+--muudame veeru nime
+sp_rename 'Employees.Name', 'FirstName' 
+
+update Employees
+set FirstName = 'Tom', MiddleName = 'Nick', LastName = 'Jones'
+where Id = 1
+
+update Employees
+set FirstName = 'Pam', MiddleName = NULL, LastName = 'Anderson'
+where Id = 2
+
+update Employees
+set FirstName = 'John', MiddleName = NULL, LastName = NULL
+where Id = 3
+
+update Employees
+set FirstName = 'Sam', MiddleName = NULL, LastName = 'Smith'
+where Id = 4
+
+update Employees
+set FirstName = NULL, MiddleName = 'Todd', LastName = 'Someone'
+where Id = 5
+
+update Employees
+set FirstName = 'Ben', MiddleName = 'Ten', LastName = 'Sven'
+where Id = 6
+
+update Employees
+set FirstName = 'Sara', MiddleName = NULL, LastName = 'Connor'
+where Id = 7
+
+update Employees
+set FirstName = 'Valarie', MiddleName = 'Balerine', LastName = NULL
+where Id = 8
+
+update Employees
+set FirstName = 'James', MiddleName = '007', LastName = 'Bond'
+where Id = 9
+
+update Employees
+set FirstName = NULL, MiddleName = NULL, LastName = 'Crowe'
+where Id = 10
+
+-- igast reast v]tab esimesena t'idetud lahtri ja kuvab ainult seda
+select Id, coalesce(FirstName, MiddleName, LastName) as Name
+from Employees
+
+select * from Employees
 
 
+--loome kaks tabelit
+create table IndianCustomers
+(
+Id int identity(1,1),
+Name nvarchar(25),
+Email nvarchar(25)
+)
 
+create table UKCustomers
+(
+Id int identity(1,1),
+Name nvarchar(25),
+Email nvarchar(25)
+)
+
+insert into IndianCustomers (Name, Email)
+values ('Raj', 'R@R.com'),
+('Sam', 'S@S.com')
+
+insert into UKCustomers (Name, Email)
+values ('Ben', 'B@B.com'),
+('Sam', 'S@S.com')
+
+select * from IndianCustomers
+select * from UKCustomers
+
+--kasutame union all, mis n'itab k]iki ridu
+select Id, Name, Email from IndianCustomers
+union all
+select Id, Name, Email from UKCustomers
+
+-- korduvate v''rtustega read pannakse [hte aj ei korrata
+select Id, Name, Email from IndianCustomers
+union
+select Id, Name, Email from UKCustomers
+
+--kuidas sorteerida nime j'rgi
+select Id, Name, Email from IndianCustomers
+union
+select Id, Name, Email from UKCustomers
+order by Name
+
+--- stored procedure
+create procedure spGetEmployees
+as begin
+	select FirstName, Gender from Employees
+end
+
+-- n[[d saab kasutada selle nimelist sp-d
+spGetEmployees
+exec spGetEmployees
+execute spGetEmployees
+
+---
+create proc spGetEmployeesByGenderAndDepartment
+@Gender nvarchar(20),
+@DepartmentId int
+as begin
+	select FirstName, Gender, DepartmentId from Employees where Gender = @Gender
+	and DepartmentId = @DepartmentId
+end
+
+-- kui n[[d allolevat k'sklust k'ima panna, siis n]uab Gender parameetrit
+spGetEmployeesByGenderAndDepartment
+--]ige variant
+spGetEmployeesByGenderAndDepartment 'male', 1
+
+--niimoodi saab parameetrite j'rjestusest m;;da minna
+spGetEmployeesByGenderAndDepartment @DepartmentId = 1, @Gender = 'Male'
+
+--- saab sp sisu vaadata result vaates
+sp_helptext spGetEmployeesByGenderAndDepartment
+
+-- kuidas muuta sp-d ja v]ti peale panna, 
+-- et keegi teine peale teie ei saaks muuta
+alter proc spGetEmployeesByGenderAndDepartment
+@Gender nvarchar(20),
+@DepartmentId int
+--with encryption
+as begin
+	select FirstName, Gender, DepartmentId from Employees where Gender = @Gender
+	and DepartmentId = @DepartmentId
+end
+
+sp_helptext spGetEmployeesByGenderAndDepartment
+
+create proc spGetEmployeeCountByGender
+@Gender nvarchar(20),
+@EmployeeCount int output
+as begin
+	select @EmployeeCount = count(Id) from Employees where Gender = @Gender
+end
+
+-- annab tulemuse, kus loendab 'ra n]uetele vastavad read
+-- prindib ka tulemuse kirja teel
+declare @TotalCount int
+execute spGetEmployeeCountByGender 'male', @TotalCount out
+if(@TotalCount = 0)
+	print '@TotalCount is null'
+else
+	print '@TotalCount is not null'
+print @TotalCount
+go --tee [levalpool p'ring 'ra ja siis mine edasi
+select * from Employees
+
+-- rida 610
