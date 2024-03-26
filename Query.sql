@@ -604,8 +604,6 @@ print @TotalCount
 go --tee [levalpool p'ring 'ra ja siis mine edasi
 select * from Employees
 
--- rida 610
-
 -- n'itab ära, et mitu rida vastab nõuetele
 declare @TotalCount int
 execute spGetEmployeeCountByGender @EmployeeCount = @TotalCount out, @Gender = 'Female'
@@ -789,3 +787,4 @@ select FirstName, LastName, Email,
 	stuff(Email, 2, 3, '*****') as StuffedEmail
 from Employees
 
+--rida 800
