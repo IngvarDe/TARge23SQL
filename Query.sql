@@ -2327,3 +2327,4 @@ order by Name
 ---- rohkete andmetega testimise tabel
 truncate table Product
 truncate table ProductSales
+
