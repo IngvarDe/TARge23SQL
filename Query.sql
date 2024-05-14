@@ -2324,4 +2324,6 @@ order by Name
 -- subqueryt saab subquery sisse panna
 -- subquerid on alati sulgudes ja neid nimetatakse sisemisteks p'ringuteks
 
-
+---- rohkete andmetega testimise tabel
+truncate table Product
+truncate table ProductSales
