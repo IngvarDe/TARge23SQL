@@ -2493,3 +2493,182 @@ from Product join
 ProductSales on Product.Id = ProductSales.ProductId
 where(Name = 'Product - 55' or Name = 'Product - 65' or Name = 'Product - 1000')
 
+--- asendame cursorid JOIN-ga
+update ProductSales
+set UnitPrice = 
+	case
+		when Name = 'Product - 55' then 155
+		when Name = 'Product - 65' then 165
+		when Name like 'Product - 1000' then 10001
+	end
+from ProductSales
+join Product
+on Product.Id = ProductSales.ProductId
+where Name = 'Product - 55' or Name = 'Product - 65' or Name like 'Product - 1000'
+
+--- tabelite info
+
+--nimekiri tabelitest
+select * from SYSOBJECTS where xtype = 'S'
+
+select * from sys.tables
+-- nimekiri tabelitest ja view-st
+select * from INFORMATION_SCHEMA.TABLES
+
+--kui soovid erinevaid objektit[[pe vaadata, siis kasuta XTYPE süntaksit
+select distinct XTYPE from sysobjects
+
+-- IT - internal table
+-- P - stored procedure
+-- PK - primary key constraint
+-- S - system table
+-- SQ - service queue
+-- U - user table
+-- V - view
+
+---annab teada, kas selle nimega tabel on juba olemas
+if not exists (select * from INFORMATION_SCHEMA.TABLES where TABLE_NAME = 'Employee')
+begin
+	create table Employee
+	(
+		Id int primary key,
+		Name nvarchar(30),
+		DepartmentId int
+	)
+
+	print 'Table created'
+end
+	else
+begin
+	print 'Table already exists'
+end
+
+---saab kasutada sisseehitatud funktsiooni: OBJECT_ID()
+if OBJECT_ID('asd') is null
+begin
+	print 'Where is no such table'
+end 
+else
+begin
+	print 'Table already exists'
+end
+
+-- tahame sama nimega tabeli ära kustutada ja siis uuesti luua
+if OBJECT_ID('Employee') is not null
+begin
+	drop table Employee
+end
+create table Employee
+(
+Id int primary key,
+Name nvarchar(30),
+ManagerId int
+)
+
+alter table Employee
+add Email nvarchar(50)
+
+--- kui uuesti k'ivitatakse veeru kontrollimist ja loomist
+if not exists(select * from INFORMATION_SCHEMA.COLUMNS where
+COLUMN_NAME = 'Email' and TABLE_NAME = 'Employee' and TABLE_SCHEMA = 'dbo')
+begin
+	alter table Employee
+	add Email nvarchar(50)
+end
+else
+begin
+	print 'Column already exists'
+end
+
+--kontrollime, kas mingi nimega veerg on olemas
+if COL_LENGTH('Employee', 'Email') is not null
+begin
+	print 'Column already exists'
+end
+else
+begin
+	print 'Column does not exists'
+end
+
+--- MERGE
+--- tutvustati aastal 2008, mis lubab teha sisestamist, uuendamist ja kustutamist
+--- ei pea kasutama mitut käsku
+
+-- merge puhul peab alati olema vähemalt kaks tabelit:
+-- 1. algallika tabel e source table
+-- 2. sihtmärk tabel e target table
+
+-- ühendab sihttabeli lähtetabeliga ja kasutab mõlemas tabelis ühist veergu
+-- koodinäide:
+
+merge [TARGET] as T
+using [SOURCE] as S
+	on [JOIN_CONDITIONS]
+when matched then
+	[UPDATE_STATEMENT]
+when not matched by target then
+	[INSERT_STATEMENT]
+when not matched by source then
+	[DELETE_STATEMENT]
+----------
+create table StudentSource
+(
+Id int primary key,
+Name nvarchar(20)
+)
+go
+insert into StudentSource values
+(1, 'Mike'),
+(2, 'Sara')
+go
+create table StudentTarget
+(
+Id int primary key,
+Name nvarchar(20)
+)
+insert into StudentTarget values
+(1, 'Mike M'),
+(3, 'John')
+go
+
+-- 1. kui leitakse klappiv rida, siis StudentTarget tabel on uuendatud
+-- 2. kui read on StudentSource tabelis olemas, aga neid ei ole StudentTarget-s,
+-- siis puuduolevad read sisestatakse 
+-- 3. kui read on olemas StudentTarget-s, aga mitte StudentSource-s, 
+-- siis StudentTarget tabelis read kustutatakse ära
+merge StudentTarget as T
+using StudentSource as S
+on T.Id = S.Id
+when matched then
+	update set T.Name = S.Name
+when not matched by target then
+	insert (Id, Name) values(S.Id, S.Name)
+when not matched by source then
+	delete;
+go
+select * from StudentTarget
+select * from StudentSource
+
+---tabelid sisust tühjaks
+truncate table StudentTarget
+truncate table StudentSource
+
+insert into StudentSource values
+(1, 'Mike'),
+(2, 'Sara')
+
+insert into StudentTarget values
+(1, 'Mike M'),
+(3, 'John')
+
+merge StudentTarget as T
+using StudentSource as S
+on T.Id = S.Id
+when matched then
+	update set T.Name = S.Name
+when not matched by target then
+	insert (Id, Name) values(S.Id, S.Name);
+go
+select * from StudentTarget
+select * from StudentSource
+
