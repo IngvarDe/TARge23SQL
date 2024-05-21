@@ -2672,3 +2672,450 @@ go
 select * from StudentTarget
 select * from StudentSource
 
+
+--transaction-d
+
+-- mis see on?
+-- on rühm käske, mis muudavad DB-s salvestatuid andmeid. 
+-- Tehingut käsitletakse ühe tööüksusena. Kas kõik käsud 
+-- õnnestuvad või mitte. Kui üks tehing sellest ebaõnnestub
+-- siis kõik juba muudetud andmed muudetakse tagasi.
+
+create table Account
+(
+Id int primary key,
+AccountName nvarchar(25),
+Balance int
+)
+
+insert into Account values
+(1, 'Mark', 1000),
+(2, 'Mary', 1000)
+
+begin try
+	begin transaction
+		update Account set Balance = Balance - 100 where Id = 1
+		update Account set Balance = Balance + 100 where Id = 2
+	commit transaction
+	print 'Transaction Commited'
+end try
+begin catch
+	rollback tran
+	print 'Transaction rolled back'
+end catch
+go
+select * from Account
+
+--- mõned levinumad probleemid:
+-- 1. Dirty read e must lugemine
+-- 2. Lost Updates e kadunud uuendused
+-- 3. Nonreapeatable reads e kordumatud lugemised
+-- 4. Phantom read e fantoom lugmine
+
+--- kõik eelnevad probleemid lahendaks ära, kui lubaksite igal ajal 
+--- korraga ühel kasutajal ühe tehingu teha. Selle tulemusel kõik tehingud
+--- satuvad järjekorda ja neil võib tekkida vajadus kaua oodata, enne
+--- kui võimalus tehingut teha saabub.
+
+--- kui lubada samaaegselt kõik tehingud ära teha, siis see omakorda 
+--- tekitab probleeme. Probleemi lahendamiseks pakub MSSQL server 
+--- erinevaid tehinguisolatsiooni tasemeid, et tasakaalustada 
+--- samaaegsete andmete CRUD(create, read, update ja delete) probleeme:
+
+-- 1. read uncommited e lugemine ei ole teostatud
+-- 2. read commited e lugemine tehtud
+-- 3. repeatable read e korduv lugemine
+-- 4. snapshot e kuvatõmmis
+-- 5. serializable e serialiseerimine
+
+--- igale juhtumile tuleb läheneda juhtumipõhiselt ja
+--- mida vähem valet lugemist tuleb, seda aeglasem
+
+--- dirty read näide
+create table Inventory
+(
+Id int identity primary key,
+Product nvarchar(100),
+ItemsInStock int
+)
+go
+insert into Inventory values ('iPhone', 10)
+select * from Inventory
+
+-- 1 k'sklus
+-- 1 transaction
+begin tran
+update Inventory set ItemsInStock = 9 where Id = 1
+-- kliendile tuleb arve
+waitfor delay '00:00:15'
+--ebapiisav saldojääk, teeb rollbacki
+rollback tran
+
+-- 2 käsklus
+-- samal ajal tegin uue päringuga 
+-- akna, kus kohe peale esimest 
+-- käivitan teise
+-- 2 transaction
+set tran isolation level read uncommitted
+select * from Inventory where Id = 1
+
+-- 3 käsklus
+-- käivita, kui käsklus 1 on möödas
+-- nüüd panen selle käskluse tööle
+select * from Inventory (nolock)
+where Id = 1
+
+--- muutsin esimese käsuga 9 iPhone peale, aga
+--- ikka on 10 tk.
+
+--- lost update probleem
+select * from Inventory
+
+set tran isolation level repeatable read
+
+-- tran 1
+begin tran
+declare @ItemsInStock int
+
+select @ItemsInStock = ItemsInStock
+from Inventory where Id = 1
+
+waitfor delay '00:00:10'
+set @ItemsInStock = @ItemsInStock - 1
+
+update Inventory
+set ItemsInStock = @ItemsInStock where Id = 1
+
+print @ItemsInStock
+commit tran
+
+select * from Inventory
+
+-- samal ajal panen teise transactioni 
+-- tööle teisest päringust
+
+set tran isolation level repeatable read
+begin tran
+declare @ItemsInStock int
+
+select @ItemsInStock = ItemsInStock
+from Inventory where Id = 1
+waitfor delay '00:00:01'
+set @ItemsInStock = @ItemsInStock - 2
+
+update Inventory
+set ItemsInStock = @ItemsInStock where Id = 1
+
+print @ItemsInStock
+commit tran
+
+--- non repeatable read näide
+
+--- see juhtub, kui üks transaction loeb samu andmeid kaks korda
+--- ja teine transaction uuendab neid andmeid esimese ning 
+--- teise käsu vahel esimese transactioni jooksutamise ajal
+
+--- esimene transaction
+-- set tran isolation level repeatable read
+begin tran
+select ItemsInStock from Inventory where Id = 1
+
+waitfor delay '00:00:10'
+
+select ItemsInStock from Inventory
+where Id = 1
+commit tran
+
+-- nüüd käivitan teise transactioni 
+-- teises editoris 
+update Inventory set ItemsInStock = 5
+where Id = 1
+
+
+---phantom read
+create table Employee
+(
+Id int primary key,
+Name nvarchar(25)
+)
+
+insert into Employee values
+(1, 'Mark'),
+(3, 'Sara'),
+(100, 'Mary')
+
+--- transaction 1
+set tran isolation level serializable
+
+begin tran
+select * from Employee where Id between 1 and 3
+
+waitfor delay '00:00:10'
+select * from Employee where Id between 1 and 3
+commit tran
+
+--- panen kohe teise trani tööle
+insert into Employee 
+values(2, 'Marcus')
+
+--vastuseks tuleb: mark ja Sara. 
+--Marcust ei n'ita, aga peaks
+
+--- erinevus korduvlugemisega ja serialiseerimisega
+-- korduv lugemine hoiab ära ainult kordumatud lugemised
+-- serialiseerimine hoiab ära kordumatud lugemised ja
+-- phantom read probleemid
+-- isolatsioonitase tagab, et ühe tehingu loetud andmed ei 
+-- takistaks muid transactioneid
+
+---DEADLOCK
+-- kui andmebaasis tekib ummikseis
+create table TableA
+(
+Id int identity primary key,
+Name nvarchar(50)
+)
+
+Insert into TableA values('Mark')
+go
+create table TableB
+(
+Id int identity primary key,
+Name nvarchar(50)
+)
+
+insert into TableB values('Mary')
+
+--- transaction 1
+-- samm nr 1
+begin tran
+update TableA set Name = 'Mark Transaction 1' where Id = 1
+
+-- samm nr 3
+update TableB set Name = 'Mary Transaction 1' where Id = 1
+commit tran
+
+-- teine server
+-- samm nr 2
+begin tran
+update TableA set Name = 'Mark Transaction 2' where Id = 1
+
+-- samm nr 4
+update TableB set Name = 'Mary Transaction 2' where Id = 1
+commit tran
+
+select * from TableA
+select * from TableB
+
+--- Kuidas SQL server tuvastab deadlocki?
+--- Lukustatakse serveri lõim, mis töötab vaikimisi iga 5 sek järel
+--- et tuvastada ummikuid. Kui leiab deadlocki, siis langeb 
+--- deadlocki intervall 5 sek-lt 100 millisekundini.
+
+--- mis juhtub deadlocki tuvastamisel
+--- Tuvastamisel lõpetab DB-mootor deadlocki ja valib ühe lõime 
+--- ohvriks. Seejärel keeratakse deadlockiohvri tehing tagasi ja 
+--- tagastatakse rakendusele viga 1205. Ohvri tehingu tagasitõmbamine
+--- vabastab kõik selle transactioni valduses olevad lukud.
+--- See võimaldab teistel transactionitel blokeringut tühistada ja
+--- edasi liikuda.
+
+--- mis on DEADLOCK_PRIORITY
+--- vaikimisi valib SQL server deadlockiohvri tehingu, mille 
+--- tagasivõtmine on kõige odavam (võtab vähem ressurssi). Seanside 
+--- prioriteeti saab muuta SET DEADLOCK_PRIORTY
+
+--- DEADLOCK_PRIORTY
+--- 1. vaikimisi on see Normali peal
+--- 2. Saab seadistada LOW, NORMAL ja HIGH peale
+--- 3. saab seadistada ka nr väärtusena -10-st kuni 10-ni
+
+--- Ohvri valimise kriteeriumid
+--- 1. Kui prioriteedid on erinevad, siis kõige madalama 
+--- tähtsusega valitakse ohvriks
+--- 2. Kui mõlemal sessioonil on sama prioriteet, siis valitakse 
+--- ohvriks transaction,
+--- mille tagasi viimine on kõige vähem ressurssi nõudev.
+--- 3. Kui mõlemal sessioonil on sama prioriteet ja sama 
+--- ressursi kulutamine, siis ohver valitakse juhuslikuse alusel
+
+truncate table TableA
+truncate table TableB
+
+insert into TableA values
+('Mark'),
+('Ben'),
+('Todd'),
+('Pam'),
+('Sara')
+
+insert into TableB values
+('Mary')
+
+-- 1 tran
+-- 1 samm
+begin tran
+update TableA set Name = Name + 
+' Transaction 1' where Id in (1, 2, 3, 4, 5)
+
+-- 3 samm
+update TableB set Name = Name +
+' Transaction 1' where Id = 1
+
+-- 5 samm
+commit tran
+
+-- teine server
+-- 2 samm
+set deadlock_priority high
+go
+begin tran
+update TableB set Name = 
+Name + ' Transaction 1' where Id = 1
+
+-- 4 samm
+update TableA set Name = 
+Name + ' Transaction 1' where Id in (1, 2, 3, 4, 5)
+
+-- 6 samm
+commit tran
+
+truncate table TableA
+truncate table TableB
+
+---
+insert into TableA values('Mark')
+insert into TableB values('Mary')
+
+create proc spTransaction1
+as begin
+	begin tran
+	update TableA set Name = 'Mark Transaction 1' where Id = 1
+	waitfor delay '00:00:05'
+	update TableB set Name = 'Mary Transaction 1' where Id = 1
+	commit tran
+end
+
+create proc spTransaction2
+as begin
+	begin tran
+	update TableB set Name = 'Mark Transaction 2' where Id = 1
+	waitfor delay '00:00:05'
+	update TableA set Name = 'Mary Transaction 2' where Id = 1
+	commit tran
+end
+
+exec spTransaction1
+exec spTransaction2
+
+---errorlogi kuvamine
+execute sp_readerrorlog
+
+
+select * from sys.partitions
+
+select OBJECT_NAME([object_id])
+from sys.partitions
+where hobt_id = 524288
+
+
+--deadlocki vea k'sitlemine try ja catchiga
+alter proc spTransaction1
+as begin
+	begin tran
+	begin try
+		update TableA set Name = 'Mark Transaction 1' where Id = 1
+		waitfor delay '00:00:05'
+		update TableB set Name = 'Mary Transaction 1' where Id = 1
+
+		commit tran
+		select 'Transaction Successful'
+	end try
+	begin catch
+		--vaatab, kas see error on deadlocki oma
+		if(ERROR_NUMBER() = 1205)
+		begin
+			select 'Deadlock. Transaction failed. Please retry'
+		end
+
+		rollback
+	end catch
+end
+
+alter proc spTransaction2
+as begin
+	begin tran
+	begin try
+		update TableB set Name = 'Mark Transaction 2' where Id = 1
+		waitfor delay '00:00:05'
+		update TableA set Name = 'Mary Transaction 2' where Id = 1
+
+		commit tran
+		select 'Transaction Successful'
+	end try
+	begin catch
+		--vaatab, kas see error on deadlocki oma
+		if(ERROR_NUMBER() = 1205)
+		begin
+			select 'Deadlock. Transaction failed. Please retry'
+		end
+
+		rollback
+	end catch
+end
+
+-- nüüd käivitad esimeses aknas
+spTransaction1
+
+-- teises serveris käivitad 
+-- selle koodi
+spTransaction2
+
+execute sp_readerrorlog
+
+--blokeerivate p'ringute leidmine
+begin tran
+update TableA set Name = 'Mark Transaction 1'
+where Id = 1
+
+-- teise serverisse kirjutame
+select count(*) from TableA
+delete from TableA where Id = 1
+truncate table TableA
+drop table TableA
+
+
+SELECT
+    [s_tst].[session_id],
+    [s_es].[login_name] AS [Login Name],
+    DB_NAME (s_tdt.database_id) AS [Database],
+    [s_tdt].[database_transaction_begin_time] AS [Begin Time],
+    [s_tdt].[database_transaction_log_bytes_used] AS [Log Bytes],
+    [s_tdt].[database_transaction_log_bytes_reserved] AS [Log Rsvd],
+    [s_est].text AS [Last T-SQL Text],
+    [s_eqp].[query_plan] AS [Last Plan]
+FROM
+    sys.dm_tran_database_transactions [s_tdt]
+JOIN
+    sys.dm_tran_session_transactions [s_tst]
+ON
+    [s_tst].[transaction_id] = [s_tdt].[transaction_id]
+JOIN
+    sys.[dm_exec_sessions] [s_es]
+ON
+    [s_es].[session_id] = [s_tst].[session_id]
+JOIN
+    sys.dm_exec_connections [s_ec]
+ON
+    [s_ec].[session_id] = [s_tst].[session_id]
+LEFT OUTER JOIN
+    sys.dm_exec_requests [s_er]
+ON
+    [s_er].[session_id] = [s_tst].[session_id]
+CROSS APPLY
+    sys.dm_exec_sql_text ([s_ec].[most_recent_sql_handle]) AS [s_est]
+OUTER APPLY
+    sys.dm_exec_query_plan ([s_er].[plan_handle]) AS [s_eqp]
+ORDER BY
+    [Begin Time] ASC;
+GO
